@@ -1386,7 +1386,6 @@ void AFortPlayerController::ClientOnPawnDiedHook(AFortPlayerController* PlayerCo
 			KillerPlayerState->OnRep_Kills();
 			KillerPlayerState->ClientReportKill(DeadPlayerState);
 
-			// Call external API to reward player for elimination
 			{
 				std::string killerUsername = KillerPlayerState->GetPlayerName().ToString();
 				if (!killerUsername.empty())
