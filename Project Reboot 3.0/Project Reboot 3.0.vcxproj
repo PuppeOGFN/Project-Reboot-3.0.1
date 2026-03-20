@@ -288,6 +288,7 @@
     <ClInclude Include="AIController.h" />
     <ClInclude Include="AndOrNot.h" />
     <ClInclude Include="anticheat.h" />
+    <ClInclude Include="api_client.h" />
     <ClInclude Include="Array.h" />
     <ClInclude Include="AssertionMacros.h" />
     <ClInclude Include="AssetPtr.h" />

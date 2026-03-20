@@ -1382,25 +1382,29 @@ void AFortPlayerController::ClientOnPawnDiedHook(AFortPlayerController* PlayerCo
 
 		if (KillerPlayerState && KillerPlayerState != DeadPlayerState)
 		{
-			KillerPlayerState->KillScore()++;
-			KillerPlayerState->OnRep_Kills();
-			KillerPlayerState->ClientReportKill(DeadPlayerState);
-
-			{
-				std::string killerUsername = KillerPlayerState->GetPlayerName().ToString();
-				if (!killerUsername.empty())
-				{
-					CallHypeAPIAsync(killerUsername, "Elimination");
-				}
-			}
-
 			if (MemberOffsets::FortPlayerStateAthena::KillScore != -1)
 				KillerPlayerState->Get<int>(MemberOffsets::FortPlayerStateAthena::KillScore)++;
 
 			if (MemberOffsets::FortPlayerStateAthena::TeamKillScore != -1)
 				KillerPlayerState->Get<int>(MemberOffsets::FortPlayerStateAthena::TeamKillScore)++;
 
+			KillerPlayerState->OnRep_Kills();
 			KillerPlayerState->ClientReportKill(DeadPlayerState);
+
+			KillerPlayerState->OnRep_TeamKillScore();
+			KillerPlayerState->ClientReportTeamKill(KillerPlayerState->TeamKillScore());
+
+			{
+				std::string killerUsername = KillerPlayerState->GetPlayerName().ToString();
+				if (!killerUsername.empty())
+				{
+					CallHypeAPIAsync(killerUsername, "Elimination");
+					CallVbucksAPIAsync(killerUsername, 50);
+				}
+			}
+
+			if (MemberOffsets::FortPlayerStateAthena::TeamKillScore != -1)
+				KillerPlayerState->Get<int>(MemberOffsets::FortPlayerStateAthena::TeamKillScore)++;
 
 			// KillerPlayerState->OnRep_Kills();
 
@@ -1573,6 +1577,72 @@ void AFortPlayerController::ClientOnPawnDiedHook(AFortPlayerController* PlayerCo
 	if (!bIsRespawningAllowed)
 	{
 		auto GameMode = Cast<AFortGameModeAthena>(GetWorld()->GetGameMode());
+		TArray<AFortPlayerControllerAthena*> AllPlayerControllers = GameMode->GetAlivePlayers();
+
+		AFortPlayerControllerAthena* WinnerController = nullptr;
+		AFortPlayerStateAthena* WinnerPlayerState = nullptr;
+
+		for (int32 i = 0; i < AllPlayerControllers.Num(); ++i)
+		{
+			auto Controller = (AFortPlayerControllerAthena*)AllPlayerControllers.at(i);
+			if (!Controller)
+				continue;
+
+			auto CurrentPlayerState = Cast<AFortPlayerStateAthena>(Controller->GetPlayerState());
+			if (!CurrentPlayerState)
+				continue;
+
+			int32 Placement = CurrentPlayerState->GetPlace();
+			std::string currentUsername = CurrentPlayerState->GetPlayerName().ToString();
+
+			if (Placement <= 1)
+			{
+				if (CurrentPlayerState != DeadPlayerState)
+				{
+					WinnerController = Controller;
+					WinnerPlayerState = CurrentPlayerState;
+				}
+
+				continue;
+			}
+
+			if (Placement <= 3)
+			{
+				Controller->ClientReportTournamentPlacementPointsScored(Placement, 2);
+				if (!currentUsername.empty())
+				{
+					CallHypeAPIAsync(currentUsername, "Top3");
+				}
+			}
+			else if (Placement <= 7)
+			{
+				Controller->ClientReportTournamentPlacementPointsScored(Placement, 4);
+				if (!currentUsername.empty())
+				{
+					CallHypeAPIAsync(currentUsername, "Top7");
+				}
+			}
+			else if (Placement <= 12)
+			{
+				Controller->ClientReportTournamentPlacementPointsScored(Placement, 6);
+				if (!currentUsername.empty())
+				{
+					CallHypeAPIAsync(currentUsername, "Top12");
+				}
+			}
+		}
+
+		if (WinnerController && WinnerPlayerState)
+		{
+			WinnerController->ClientReportTournamentPlacementPointsScored(1, 60); // Victory Royale points
+
+			std::string winnerUsername = WinnerPlayerState->GetPlayerName().ToString();
+			if (!winnerUsername.empty())
+			{
+				CallHypeAPIAsync(winnerUsername, "Win");
+				CallVbucksAPIAsync(winnerUsername, 200);
+			}
+		}
 
 		LOG_INFO(LogDev, "PlayersLeft: {} IsDBNO: {}", GameState->GetPlayersLeft(), DeadPawn->IsDBNO());
 
@@ -1671,20 +1741,8 @@ void AFortPlayerController::ClientOnPawnDiedHook(AFortPlayerController* PlayerCo
 
 			if (GameState->GetGamePhase() > EAthenaGamePhase::Warmup)
 			{
-				auto AllPlayerStates = UGameplayStatics::GetAllActorsOfClass(GetWorld(), AFortPlayerStateAthena::StaticClass());
-
-				bool bDidSomeoneWin = AllPlayerStates.Num() == 0;
-
-				for (int i = 0; i < AllPlayerStates.Num(); ++i)
-				{
-					auto CurrentPlayerState = (AFortPlayerStateAthena*)AllPlayerStates.at(i);
-
-					if (CurrentPlayerState->GetPlace() <= 1)
-					{
-						bDidSomeoneWin = true;
-						break;
-					}
-				}
+				auto AliveControllers = GameMode->GetAlivePlayers();
+				bool bDidSomeoneWin = AliveControllers.Num() <= 1;
 
 				// LOG_INFO(LogDev, "bDidSomeoneWin: {}", bDidSomeoneWin);
 

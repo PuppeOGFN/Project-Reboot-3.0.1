@@ -251,6 +251,17 @@ public:
 		return ReadBitfieldValue(bMarkedAliveOffset, bMarkedAliveFieldMask);
 	}
 
+	void ClientReportTournamentPlacementPointsScored(int32 Placement, int32 PointsEarned)
+	{
+		static auto Function = FindFunction("ClientReportTournamentPlacementPointsScored");
+
+		struct { int32 Placement; int32 PointsEarned; }
+
+		Params{ Placement, PointsEarned };
+
+		this->ProcessEvent(Function, &Params);
+	}
+
 	static void StartGhostModeHook(UObject* Context, FFrame* Stack, void* Ret); // we could native hook this but eh
 	static void EndGhostModeHook(AFortPlayerControllerAthena* PlayerController);
 	static void ServerCreativeSetFlightSpeedIndexHook(UObject* Context, FFrame* Stack);

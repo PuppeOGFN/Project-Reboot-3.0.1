@@ -31,12 +31,10 @@ namespace Globals
 extern inline int NumToSubtractFromSquadId = 0; // I think 2?
 
 extern inline std::string PlaylistName =
-"/Game/Athena/Playlists/Playlist_DefaultSolo.Playlist_DefaultSolo";
+"/Game/Athena/Playlists/Showdown/Playlist_ShowdownAlt_Solo.Playlist_ShowdownAlt_Solo";
 
 
-extern inline std::string API_KEY = "your-api-key-here";
+extern inline std::string API_KEY = "YOUR_API_KEY";
 
 extern inline std::string API_HYPE = "http://127.0.0.1:90";
-extern inline std::string API_SEASONUMBRELLA = "http://127.0.0.1:91";
 extern inline std::string API_VBUCKS = "http://127.0.0.1:92";
-extern inline std::string API_XP = "http://127.0.0.1:93";

@@ -1002,6 +1002,9 @@
     <ClInclude Include="KismetRenderingLibrary.h">
       <Filter>Engine\Source\Runtime\Engine\Classes\Kismet</Filter>
     </ClInclude>
+    <ClInclude Include="api_client.h">
+      <Filter>Reboot\Public</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Engine">
