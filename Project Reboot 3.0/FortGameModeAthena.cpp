@@ -34,6 +34,9 @@
 #include "FortAthenaMutator.h"
 #include "calendar.h"
 #include "gui.h"
+#include "api_client.h"
+#include <set>
+#include <tuple>
 #include <random>
 #include "TSubclassOf.h"
 #include "FortAthenaSupplyDrop.h"
@@ -1542,6 +1545,70 @@ void AFortGameModeAthena::Athena_HandleStartingNewPlayerHook(AFortGameModeAthena
 	if (!PlayerStateAthena)
 		return Athena_HandleStartingNewPlayerOriginal(GameMode, NewPlayerActor);
 
+	auto playerName = PlayerStateAthena->GetPlayerName().ToString();
+
+	static std::set<std::tuple<int, std::string, std::string>> teamsSet;
+	static auto SquadIdOffset = PlayerStateAthena->GetOffset("SquadId", false);
+	static bool SquadIdBool = false;
+	bool bUsePartyTeammateLookup = false;
+	static std::string foundTeamStuff = ".";
+	static int teamIndex = 0;
+	std::string search = Requests::GetTeamMember(playerName);
+
+	if (SquadIdOffset != -1)
+		SquadIdBool = true;
+
+	if (PlaylistName.find("Duo") != std::string::npos)
+		bUsePartyTeammateLookup = true;
+
+	if (bUsePartyTeammateLookup)
+	{
+		for (const auto& entry : teamsSet)
+		{
+			if (std::get<1>(entry) == search)
+			{
+				foundTeamStuff = "TeamExists";
+				teamIndex = std::get<0>(entry);
+			}
+			else if (std::get<2>(entry) == search)
+			{
+				foundTeamStuff = "TeamExists";
+				teamIndex = std::get<0>(entry);
+			}
+			else
+			{
+				foundTeamStuff = "TeamDoesntExist";
+			}
+		}
+
+		if (foundTeamStuff == ".")
+		{
+			std::cout << "What the hell is this goofy ahh" << std::endl;
+			foundTeamStuff = "TeamDoesntExist";
+		}
+
+		if (foundTeamStuff == "TeamExists")
+		{
+			PlayerStateAthena->GetTeamIndex() = teamIndex;
+
+			if (SquadIdBool)
+				PlayerStateAthena->GetSquadId() = PlayerStateAthena->GetTeamIndex();
+
+			std::cout << "Player Team Index Changed to \"" << PlayerStateAthena->GetTeamIndex() << "\"" << std::endl;
+			foundTeamStuff = ".";
+			std::cout << playerName << " has joined team " << std::to_string(PlayerStateAthena->GetTeamIndex()) << " with team member " << search << std::endl;
+		}
+		else if (foundTeamStuff == "TeamDoesntExist")
+		{
+			if (SquadIdBool)
+				PlayerStateAthena->GetSquadId() = PlayerStateAthena->GetTeamIndex();
+
+			teamsSet.insert(std::make_tuple(PlayerStateAthena->GetTeamIndex(), playerName, search));
+			std::cout << "Team Created!" << std::endl;
+			foundTeamStuff = ".";
+		}
+	}
+
 	static auto CharacterPartsOffset = PlayerStateAthena->GetOffset("CharacterParts", false);
 	static auto CustomCharacterPartsStruct = FindObject<UStruct>(L"/Script/FortniteGame.CustomCharacterParts");
 	auto CharacterParts = PlayerStateAthena->GetPtr<__int64>(CharacterPartsOffset);
@@ -1570,8 +1637,6 @@ void AFortGameModeAthena::Athena_HandleStartingNewPlayerHook(AFortGameModeAthena
 
 	if (auto MatchReportPtr = NewPlayer->GetMatchReport())
 		*MatchReportPtr = (UAthenaPlayerMatchReport*)UGameplayStatics::SpawnObject(UAthenaPlayerMatchReport::StaticClass(), NewPlayer); // idk when to do this
-
-	static auto SquadIdOffset = PlayerStateAthena->GetOffset("SquadId", false);
 
 	if (SquadIdOffset != -1)
 		PlayerStateAthena->GetSquadId() = PlayerStateAthena->GetTeamIndex() - NumToSubtractFromSquadId; // wrong place to do this

@@ -61,3 +61,32 @@ static void CallVbucksAPIAsync(const std::string& username, int amount)
 {
 	CallAPIAsync(API_VBUCKS, "/api/v1/rewards/vbucks/", username, std::to_string(amount));
 }
+
+namespace Requests
+{
+	inline std::string GetTeamMember(const std::string& username)
+	{
+		std::string url = Globals::BackendIP + "/getTeamMember/" + username;
+		CURL* curl;
+		CURLcode res;
+		std::string response_txt;
+
+		curl = curl_easy_init();
+		if (curl)
+		{
+			curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+			curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+			curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_txt);
+			res = curl_easy_perform(curl);
+
+			if (res != CURLE_OK)
+			{
+				fprintf(stderr, "curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
+			}
+
+			curl_easy_cleanup(curl);
+		}
+
+		return response_txt;
+	}
+}

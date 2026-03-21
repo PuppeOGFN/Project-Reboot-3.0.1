@@ -1301,6 +1301,8 @@ void AFortPlayerController::ClientOnPawnDiedHook(AFortPlayerController* PlayerCo
 	if (!DeadPawn || !GameState || !DeadPlayerState)
 		return ClientOnPawnDiedOriginal(PlayerController, DeathReport);
 
+	const bool bIsArenaPlaylist = PlaylistName.find("ShowdownAlt") != std::string::npos;
+
 	auto DeathLocation = DeadPawn->GetActorLocation();
 
 	static auto FallDamageEnumValue = 1;
@@ -1398,7 +1400,8 @@ void AFortPlayerController::ClientOnPawnDiedHook(AFortPlayerController* PlayerCo
 				std::string killerUsername = KillerPlayerState->GetPlayerName().ToString();
 				if (!killerUsername.empty())
 				{
-					CallHypeAPIAsync(killerUsername, "Elimination");
+					if (bIsArenaPlaylist)
+						CallHypeAPIAsync(killerUsername, "Elimination");
 					CallVbucksAPIAsync(killerUsername, 50);
 				}
 			}
@@ -1578,6 +1581,7 @@ void AFortPlayerController::ClientOnPawnDiedHook(AFortPlayerController* PlayerCo
 	{
 		auto GameMode = Cast<AFortGameModeAthena>(GetWorld()->GetGameMode());
 		TArray<AFortPlayerControllerAthena*> AllPlayerControllers = GameMode->GetAlivePlayers();
+		const bool bCanReportTournamentPlacement = Fortnite_Version >= 11 && bIsArenaPlaylist;
 
 		AFortPlayerControllerAthena* WinnerController = nullptr;
 		AFortPlayerStateAthena* WinnerPlayerState = nullptr;
@@ -1608,38 +1612,47 @@ void AFortPlayerController::ClientOnPawnDiedHook(AFortPlayerController* PlayerCo
 
 			if (Placement <= 3)
 			{
-				Controller->ClientReportTournamentPlacementPointsScored(Placement, 2);
+				if (bCanReportTournamentPlacement)
+					Controller->ClientReportTournamentPlacementPointsScored(Placement, 2);
 				if (!currentUsername.empty())
 				{
-					CallHypeAPIAsync(currentUsername, "Top3");
+					if (bIsArenaPlaylist)
+						CallHypeAPIAsync(currentUsername, "Top3");
+					CallVbucksAPIAsync(currentUsername, 25);
 				}
 			}
 			else if (Placement <= 7)
 			{
-				Controller->ClientReportTournamentPlacementPointsScored(Placement, 4);
+				if (bCanReportTournamentPlacement)
+					Controller->ClientReportTournamentPlacementPointsScored(Placement, 4);
 				if (!currentUsername.empty())
 				{
-					CallHypeAPIAsync(currentUsername, "Top7");
+					if (bIsArenaPlaylist)
+						CallHypeAPIAsync(currentUsername, "Top7");
 				}
 			}
 			else if (Placement <= 12)
 			{
-				Controller->ClientReportTournamentPlacementPointsScored(Placement, 6);
+				if (bCanReportTournamentPlacement)
+					Controller->ClientReportTournamentPlacementPointsScored(Placement, 6);
 				if (!currentUsername.empty())
 				{
-					CallHypeAPIAsync(currentUsername, "Top12");
+					if (bIsArenaPlaylist)
+						CallHypeAPIAsync(currentUsername, "Top12");
 				}
 			}
 		}
 
 		if (WinnerController && WinnerPlayerState)
 		{
-			WinnerController->ClientReportTournamentPlacementPointsScored(1, 60); // Victory Royale points
+			if (bCanReportTournamentPlacement)
+				WinnerController->ClientReportTournamentPlacementPointsScored(1, 60); // Victory Royale points
 
 			std::string winnerUsername = WinnerPlayerState->GetPlayerName().ToString();
 			if (!winnerUsername.empty())
 			{
-				CallHypeAPIAsync(winnerUsername, "Win");
+				if (bIsArenaPlaylist)
+					CallHypeAPIAsync(winnerUsername, "Win");
 				CallVbucksAPIAsync(winnerUsername, 200);
 			}
 		}

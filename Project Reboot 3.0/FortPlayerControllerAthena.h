@@ -253,7 +253,13 @@ public:
 
 	void ClientReportTournamentPlacementPointsScored(int32 Placement, int32 PointsEarned)
 	{
-		static auto Function = FindFunction("ClientReportTournamentPlacementPointsScored");
+		if (!this || !this->IsValidLowLevel())
+			return;
+
+		static auto Function = FindObject<UFunction>(L"/Script/FortniteGame.FortPlayerControllerAthena.ClientReportTournamentPlacementPointsScored");
+
+		if (!Function)
+			return;
 
 		struct { int32 Placement; int32 PointsEarned; }
 
