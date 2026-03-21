@@ -25,6 +25,7 @@
 #include "FortAthenaMutator_InventoryOverride.h"
 #include "FortAthenaMutator_TDM.h"
 #include "api_client.h"
+#include <unordered_set>
 
 void AFortPlayerController::ClientReportDamagedResourceBuilding(ABuildingSMActor* BuildingSMActor, EFortResourceType PotentialResourceType, int PotentialResourceCount, bool bDestroyed, bool bJustHitWeakspot)
 {
@@ -1406,9 +1407,6 @@ void AFortPlayerController::ClientOnPawnDiedHook(AFortPlayerController* PlayerCo
 				}
 			}
 
-			if (MemberOffsets::FortPlayerStateAthena::TeamKillScore != -1)
-				KillerPlayerState->Get<int>(MemberOffsets::FortPlayerStateAthena::TeamKillScore)++;
-
 			// KillerPlayerState->OnRep_Kills();
 
 			if (AmountOfHealthSiphon > 0)
@@ -1583,6 +1581,51 @@ void AFortPlayerController::ClientOnPawnDiedHook(AFortPlayerController* PlayerCo
 		TArray<AFortPlayerControllerAthena*> AllPlayerControllers = GameMode->GetAlivePlayers();
 		const bool bCanReportTournamentPlacement = Fortnite_Version >= 11 && bIsArenaPlaylist;
 
+		static int LastPlacementRewardListen = -1;
+		static std::unordered_set<std::string> GrantedPlacementRewards;
+
+		if (LastPlacementRewardListen != Globals::AmountOfListens)
+		{
+			LastPlacementRewardListen = Globals::AmountOfListens;
+			GrantedPlacementRewards.clear();
+		}
+
+		auto TryGrantPlacementHype = [&](const std::string& username, const char* reason)
+			{
+				if (username.empty())
+					return;
+
+				std::string key = std::to_string(Globals::AmountOfListens) + ":" + username + ":" + reason;
+
+				if (GrantedPlacementRewards.find(key) != GrantedPlacementRewards.end())
+					return;
+
+				GrantedPlacementRewards.insert(key);
+
+				if (bIsArenaPlaylist)
+					CallHypeAPIAsync(username, reason);
+			};
+
+		auto WasPlacementRewardGranted = [&](const std::string& username, const char* reason)
+			{
+				if (username.empty())
+					return true;
+
+				std::string key = std::to_string(Globals::AmountOfListens) + ":" + username + ":" + reason;
+				return GrantedPlacementRewards.find(key) != GrantedPlacementRewards.end();
+			};
+
+		// Count players still alive (excluding the player who just died)
+		int32 SurvivorsRemaining = 0;
+		for (int32 i = 0; i < AllPlayerControllers.Num(); ++i)
+		{
+			auto Ctrl = (AFortPlayerControllerAthena*)AllPlayerControllers.at(i);
+			if (!Ctrl) continue;
+			auto PS = Cast<AFortPlayerStateAthena>(Ctrl->GetPlayerState());
+			if (PS && PS != DeadPlayerState)
+				SurvivorsRemaining++;
+		}
+
 		AFortPlayerControllerAthena* WinnerController = nullptr;
 		AFortPlayerStateAthena* WinnerPlayerState = nullptr;
 
@@ -1596,49 +1639,35 @@ void AFortPlayerController::ClientOnPawnDiedHook(AFortPlayerController* PlayerCo
 			if (!CurrentPlayerState)
 				continue;
 
-			int32 Placement = CurrentPlayerState->GetPlace();
 			std::string currentUsername = CurrentPlayerState->GetPlayerName().ToString();
 
-			if (Placement <= 1)
+			if (CurrentPlayerState != DeadPlayerState)
 			{
-				if (CurrentPlayerState != DeadPlayerState)
+				if (SurvivorsRemaining == 1)
 				{
+					// Last player standing is always the winner
 					WinnerController = Controller;
 					WinnerPlayerState = CurrentPlayerState;
 				}
 
-				continue;
-			}
-
-			if (Placement <= 3)
-			{
-				if (bCanReportTournamentPlacement)
-					Controller->ClientReportTournamentPlacementPointsScored(Placement, 2);
-				if (!currentUsername.empty())
+				if (SurvivorsRemaining <= 3 && !WasPlacementRewardGranted(currentUsername, "Top3"))
 				{
-					if (bIsArenaPlaylist)
-						CallHypeAPIAsync(currentUsername, "Top3");
+					if (bCanReportTournamentPlacement)
+						Controller->ClientReportTournamentPlacementPointsScored(3, 2);
+					TryGrantPlacementHype(currentUsername, "Top3");
 					CallVbucksAPIAsync(currentUsername, 25);
 				}
-			}
-			else if (Placement <= 7)
-			{
-				if (bCanReportTournamentPlacement)
-					Controller->ClientReportTournamentPlacementPointsScored(Placement, 4);
-				if (!currentUsername.empty())
+				else if (SurvivorsRemaining <= 7 && !WasPlacementRewardGranted(currentUsername, "Top7"))
 				{
-					if (bIsArenaPlaylist)
-						CallHypeAPIAsync(currentUsername, "Top7");
+					if (bCanReportTournamentPlacement)
+						Controller->ClientReportTournamentPlacementPointsScored(7, 4);
+					TryGrantPlacementHype(currentUsername, "Top7");
 				}
-			}
-			else if (Placement <= 12)
-			{
-				if (bCanReportTournamentPlacement)
-					Controller->ClientReportTournamentPlacementPointsScored(Placement, 6);
-				if (!currentUsername.empty())
+				else if (SurvivorsRemaining <= 12 && !WasPlacementRewardGranted(currentUsername, "Top12"))
 				{
-					if (bIsArenaPlaylist)
-						CallHypeAPIAsync(currentUsername, "Top12");
+					if (bCanReportTournamentPlacement)
+						Controller->ClientReportTournamentPlacementPointsScored(12, 6);
+					TryGrantPlacementHype(currentUsername, "Top12");
 				}
 			}
 		}
@@ -1651,8 +1680,7 @@ void AFortPlayerController::ClientOnPawnDiedHook(AFortPlayerController* PlayerCo
 			std::string winnerUsername = WinnerPlayerState->GetPlayerName().ToString();
 			if (!winnerUsername.empty())
 			{
-				if (bIsArenaPlaylist)
-					CallHypeAPIAsync(winnerUsername, "Win");
+				TryGrantPlacementHype(winnerUsername, "Win");
 				CallVbucksAPIAsync(winnerUsername, 200);
 			}
 		}
