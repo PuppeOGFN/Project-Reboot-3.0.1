@@ -1302,6 +1302,8 @@ void AFortPlayerController::ClientOnPawnDiedHook(AFortPlayerController* PlayerCo
 	if (!DeadPawn || !GameState || !DeadPlayerState)
 		return ClientOnPawnDiedOriginal(PlayerController, DeathReport);
 
+	const bool bIsRespawningAllowed = GameState->IsRespawningAllowed(DeadPlayerState);
+
 	const bool bIsArenaPlaylist = PlaylistName.find("ShowdownAlt") != std::string::npos;
 
 	auto DeathLocation = DeadPawn->GetActorLocation();
@@ -1500,7 +1502,7 @@ void AFortPlayerController::ClientOnPawnDiedHook(AFortPlayerController* PlayerCo
 		}
 	}
 
-	bool bIsRespawningAllowed = GameState->IsRespawningAllowed(DeadPlayerState);
+	const bool bIsActuallyEliminated = !DeadPawn->IsDBNO();
 
 	bool bDropInventory = true;
 
@@ -1518,6 +1520,7 @@ void AFortPlayerController::ClientOnPawnDiedHook(AFortPlayerController* PlayerCo
 
 	if (bDropInventory
 		&& !bIsRespawningAllowed
+		&& bIsActuallyEliminated
 		)
 	{
 		auto WorldInventory = PlayerController->GetWorldInventory();
@@ -1575,7 +1578,7 @@ void AFortPlayerController::ClientOnPawnDiedHook(AFortPlayerController* PlayerCo
 		}
 	}
 
-	if (!bIsRespawningAllowed)
+	if (!bIsRespawningAllowed && bIsActuallyEliminated)
 	{
 		auto GameMode = Cast<AFortGameModeAthena>(GetWorld()->GetGameMode());
 		TArray<AFortPlayerControllerAthena*> AllPlayerControllers = GameMode->GetAlivePlayers();
@@ -1628,6 +1631,10 @@ void AFortPlayerController::ClientOnPawnDiedHook(AFortPlayerController* PlayerCo
 
 		AFortPlayerControllerAthena* WinnerController = nullptr;
 		AFortPlayerStateAthena* WinnerPlayerState = nullptr;
+		const int PlayersAtMatchStart = AmountOfPlayersWhenBusStart > 0 ? AmountOfPlayersWhenBusStart : (SurvivorsRemaining + 1);
+		const bool bCanGrantTop3 = PlayersAtMatchStart >= 3;
+		const bool bCanGrantTop7 = PlayersAtMatchStart >= 7;
+		const bool bCanGrantTop12 = PlayersAtMatchStart >= 12;
 
 		for (int32 i = 0; i < AllPlayerControllers.Num(); ++i)
 		{
@@ -1650,24 +1657,24 @@ void AFortPlayerController::ClientOnPawnDiedHook(AFortPlayerController* PlayerCo
 					WinnerPlayerState = CurrentPlayerState;
 				}
 
-				if (SurvivorsRemaining <= 3 && !WasPlacementRewardGranted(currentUsername, "Top3"))
+				if (bCanGrantTop12 && SurvivorsRemaining <= 12 && !WasPlacementRewardGranted(currentUsername, "Top12"))
 				{
 					if (bCanReportTournamentPlacement)
-						Controller->ClientReportTournamentPlacementPointsScored(3, 2);
-					TryGrantPlacementHype(currentUsername, "Top3");
-					CallVbucksAPIAsync(currentUsername, 25);
+						Controller->ClientReportTournamentPlacementPointsScored(12, 6);
+					TryGrantPlacementHype(currentUsername, "Top12");
 				}
-				else if (SurvivorsRemaining <= 7 && !WasPlacementRewardGranted(currentUsername, "Top7"))
+				else if (bCanGrantTop7 && SurvivorsRemaining <= 7 && !WasPlacementRewardGranted(currentUsername, "Top7"))
 				{
 					if (bCanReportTournamentPlacement)
 						Controller->ClientReportTournamentPlacementPointsScored(7, 4);
 					TryGrantPlacementHype(currentUsername, "Top7");
 				}
-				else if (SurvivorsRemaining <= 12 && !WasPlacementRewardGranted(currentUsername, "Top12"))
+				else if (bCanGrantTop3 && SurvivorsRemaining <= 3 && !WasPlacementRewardGranted(currentUsername, "Top3"))
 				{
 					if (bCanReportTournamentPlacement)
-						Controller->ClientReportTournamentPlacementPointsScored(12, 6);
-					TryGrantPlacementHype(currentUsername, "Top12");
+						Controller->ClientReportTournamentPlacementPointsScored(3, 2);
+					TryGrantPlacementHype(currentUsername, "Top3");
+					CallVbucksAPIAsync(currentUsername, 25);
 				}
 			}
 		}
@@ -1687,67 +1694,65 @@ void AFortPlayerController::ClientOnPawnDiedHook(AFortPlayerController* PlayerCo
 
 		LOG_INFO(LogDev, "PlayersLeft: {} IsDBNO: {}", GameState->GetPlayersLeft(), DeadPawn->IsDBNO());
 
-		if (!DeadPawn->IsDBNO())
+		if (bHandleDeath)
 		{
-			if (bHandleDeath)
+			if (Fortnite_Version > 1.8 || Fortnite_Version == 1.11)
 			{
-				if (Fortnite_Version > 1.8 || Fortnite_Version == 1.11)
+				static void (*RemoveFromAlivePlayers)(AFortGameModeAthena * GameMode, AFortPlayerController * PlayerController, APlayerState * PlayerState, APawn * FinisherPawn,
+					UFortWeaponItemDefinition * FinishingWeapon, uint8_t DeathCause, char a7)
+					= decltype(RemoveFromAlivePlayers)(Addresses::RemoveFromAlivePlayers);
+
+				AActor* DamageCauser = *(AActor**)(__int64(DeathReport) + MemberOffsets::DeathReport::DamageCauser);
+				UFortWeaponItemDefinition* KillerWeaponDef = nullptr;
+
+				static auto FortProjectileBaseClass = FindObject<UClass>(L"/Script/FortniteGame.FortProjectileBase");
+
+				if (DamageCauser)
 				{
-					static void (*RemoveFromAlivePlayers)(AFortGameModeAthena * GameMode, AFortPlayerController * PlayerController, APlayerState * PlayerState, APawn * FinisherPawn,
-						UFortWeaponItemDefinition * FinishingWeapon, uint8_t DeathCause, char a7)
-						= decltype(RemoveFromAlivePlayers)(Addresses::RemoveFromAlivePlayers);
-
-					AActor* DamageCauser = *(AActor**)(__int64(DeathReport) + MemberOffsets::DeathReport::DamageCauser);
-					UFortWeaponItemDefinition* KillerWeaponDef = nullptr;
-
-					static auto FortProjectileBaseClass = FindObject<UClass>(L"/Script/FortniteGame.FortProjectileBase");
-
-					if (DamageCauser)
+					if (DamageCauser->IsA(FortProjectileBaseClass))
 					{
-						if (DamageCauser->IsA(FortProjectileBaseClass))
-						{
-							auto Owner = Cast<AFortWeapon>(DamageCauser->GetOwner());
-							KillerWeaponDef = Owner->IsValidLowLevel() ? Owner->GetWeaponData() : nullptr; // I just added the IsValidLowLevel check because what if the weapon destroys (idk)?
-						}
-						if (auto Weapon = Cast<AFortWeapon>(DamageCauser))
-						{
-							KillerWeaponDef = Weapon->GetWeaponData();
-						}
+						auto Owner = Cast<AFortWeapon>(DamageCauser->GetOwner());
+						KillerWeaponDef = Owner->IsValidLowLevel() ? Owner->GetWeaponData() : nullptr; // I just added the IsValidLowLevel check because what if the weapon destroys (idk)?
 					}
-
-					RemoveFromAlivePlayers(GameMode, PlayerController, KillerPlayerState == DeadPlayerState ? nullptr : KillerPlayerState, KillerPawn, KillerWeaponDef, DeathCause, 0);
-
-					/*
-
-					// We need to check if their entire team is dead then I think we send it????
-
-					auto DeadControllerAthena = Cast<AFortPlayerControllerAthena>(PlayerController);
-
-					if (DeadControllerAthena && FAthenaMatchTeamStats::GetStruct())
+					if (auto Weapon = Cast<AFortWeapon>(DamageCauser))
 					{
-						auto MatchReport = DeadControllerAthena->GetMatchReport();
-
-						LOG_INFO(LogDev, "MatchReport: {}", __int64(MatchReport));
-
-						if (MatchReport)
-						{
-							MatchReport->GetTeamStats()->GetPlace() = DeadPlayerState->GetPlace();
-							MatchReport->GetTeamStats()->GetTotalPlayers() = AmountOfPlayersWhenBusStart; // hmm
-							MatchReport->HasTeamStats() = true;
-
-							DeadControllerAthena->ClientSendTeamStatsForPlayer(MatchReport->GetTeamStats());
-						}
+						KillerWeaponDef = Weapon->GetWeaponData();
 					}
-
-					*/
-
-					LOG_INFO(LogDev, "Removed!");
 				}
+
+				RemoveFromAlivePlayers(GameMode, PlayerController, KillerPlayerState == DeadPlayerState ? nullptr : KillerPlayerState, KillerPawn, KillerWeaponDef, DeathCause, 0);
+
+				/*
+
+				// We need to check if their entire team is dead then I think we send it????
+
+				auto DeadControllerAthena = Cast<AFortPlayerControllerAthena>(PlayerController);
+
+				if (DeadControllerAthena && FAthenaMatchTeamStats::GetStruct())
+				{
+					auto MatchReport = DeadControllerAthena->GetMatchReport();
+
+					LOG_INFO(LogDev, "MatchReport: {}", __int64(MatchReport));
+
+					if (MatchReport)
+					{
+						MatchReport->GetTeamStats()->GetPlace() = DeadPlayerState->GetPlace();
+						MatchReport->GetTeamStats()->GetTotalPlayers() = AmountOfPlayersWhenBusStart; // hmm
+						MatchReport->HasTeamStats() = true;
+
+						DeadControllerAthena->ClientSendTeamStatsForPlayer(MatchReport->GetTeamStats());
+					}
+				}
+
+				*/
+
+				LOG_INFO(LogDev, "Removed!");
 
 				// LOG_INFO(LogDev, "KillerPlayerState->Place: {}", KillerPlayerState ? KillerPlayerState->GetPlace() : -1);
 
-				LOG_INFO(LogDev, "TeamsLeft: {}", GameState->GetTeamsLeft()); // Important for launcher don't remove!
 			}
+
+			LOG_INFO(LogDev, "TeamsLeft: {}", GameState->GetTeamsLeft()); // Important for launcher don't remove!
 		}
 
 		if (Fortnite_Version < 6) // Spectating (is this the actual build or is it like 6.10 when they added it auto).
@@ -1801,7 +1806,8 @@ void AFortPlayerController::ClientOnPawnDiedHook(AFortPlayerController* PlayerCo
 		// AllPlayerBotsToTick.remov3lbah
 	}
 
-	DeadPlayerState->EndDBNOAbilities();
+	if (bIsActuallyEliminated)
+		DeadPlayerState->EndDBNOAbilities();
 
 	return ClientOnPawnDiedOriginal(PlayerController, DeathReport);
 }

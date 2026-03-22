@@ -32,10 +32,10 @@ namespace Globals
 extern inline int NumToSubtractFromSquadId = 0; // I think 2?
 
 extern inline std::string PlaylistName =
-"/Game/Athena/Playlists/Showdown/Playlist_ShowdownAlt_Solo.Playlist_ShowdownAlt_Solo"; // Arena Solos
-// "/Game/Athena/Playlists/Showdown/Playlist_ShowdownAlt_Duo.Playlist_ShowdownAlt_Duo"; // Arena Duos
+ "/Game/Athena/Playlists/Showdown/Playlist_ShowdownAlt_Solo.Playlist_ShowdownAlt_Solo"; // Arena Solos
+// "/Game/Athena/Playlists/Showdown/Playlist_ShowdownAlt_Duo.Playlist_ShowdownAlt_Duo"; // Arena Duos (known for not working properly rn)
 // "/Game/Athena/Playlists/Playlist_DefaultSolo.Playlist_DefaultSolo"; // Normal Solos
-// "/Game/Athena/Playlists/Playlist_DefaultDuo.Playlist_DefaultDuo"; // Normal Duos
+// "/Game/Athena/Playlists/Playlist_DefaultDuo.Playlist_DefaultDuo"; // Normal Duos (knocking doesnt work smh)
 
 
 extern inline std::string API_KEY = "YOUR_API_KEY";
